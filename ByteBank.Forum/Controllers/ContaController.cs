@@ -110,8 +110,33 @@ namespace ByteBank.Forum.Controllers
         public async Task<ActionResult> RegistrarPorAutenticacaoExternaCallback()
         {
             var loginInfo = await SignInManager.AuthenticationManager.GetExternalLoginInfoAsync();
+            var usuarioExiste = await UserManager.FindByEmailAsync(loginInfo.Email);
 
-            return null;
+            if (usuarioExiste != null)
+            {
+                return View("Error");
+            }
+
+            var novoUsuario = new UsuarioAplicacao
+            {
+                Email = loginInfo.Email,
+                UserName = loginInfo.Email,
+                NomeCompleto = loginInfo.ExternalIdentity.FindFirstValue(loginInfo.ExternalIdentity.NameClaimType)
+            };
+
+            var resultado = await UserManager.CreateAsync(novoUsuario);
+
+            if (resultado.Succeeded)
+            {
+                var resultadoAddLoginInfo = await UserManager.AddLoginAsync(novoUsuario.Id, loginInfo.Login);
+
+                if (resultadoAddLoginInfo.Succeeded)
+                {
+                    return RedirectToAction("Index", "Home");
+                }
+            }
+
+            return View("Error");
         }
 
         public async Task<ActionResult> ConfirmacaoEmail(string usuarioId, string token)
@@ -187,6 +212,30 @@ namespace ByteBank.Forum.Controllers
             }
 
             return View(contaLoginViewModel);
+        }
+
+        [HttpPost]
+        public ActionResult LoginPorAutenticacaoExterna(string provider)
+        {
+            SignInManager.AuthenticationManager.Challenge(new AuthenticationProperties
+            {
+                RedirectUri = Url.Action("LoginPorAutenticacaoExternaCallback")
+            }, provider);
+
+            return new HttpUnauthorizedResult();
+        }
+
+        public async Task<ActionResult> LoginPorAutenticacaoExternaCallback()
+        {
+            var loginInfo = await SignInManager.AuthenticationManager.GetExternalLoginInfoAsync();
+            var signInResultado = await SignInManager.ExternalSignInAsync(loginInfo, true);
+
+            if (signInResultado == SignInStatus.Success)
+            {
+                return RedirectToAction("Index", "Home");
+            }
+
+            return View("Error");
         }
 
         public ActionResult LembrarSenha()

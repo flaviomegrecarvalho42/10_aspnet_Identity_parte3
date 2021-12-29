@@ -1,5 +1,6 @@
 ﻿using ByteBank.Forum.App_Start.Identity;
 using ByteBank.Forum.Models;
+using ByteBank.Forum.Util;
 using Microsoft.AspNet.Identity;
 using Microsoft.AspNet.Identity.EntityFramework;
 using Microsoft.AspNet.Identity.Owin;
@@ -27,6 +28,20 @@ namespace ByteBank.Forum
                 {
                     var dbContext = contextoOwin.Get<DbContext>();
                     return new UserStore<UsuarioAplicacao>(dbContext);
+                });
+
+            builder.CreatePerOwinContext<RoleStore<IdentityRole>>(
+                (opcoes, contextoOwin) =>
+                {
+                    var dbContext = contextoOwin.Get<DbContext>();
+                    return new RoleStore<IdentityRole>(dbContext);
+                });
+
+            builder.CreatePerOwinContext<RoleManager<IdentityRole>>(
+                (opcoes, contextoOwin) =>
+                {
+                    var roleStore = contextoOwin.Get<RoleStore<IdentityRole>>();
+                    return new RoleManager<IdentityRole>(roleStore);
                 });
 
             builder.CreatePerOwinContext<UserManager<UsuarioAplicacao>>(
@@ -85,6 +100,55 @@ namespace ByteBank.Forum
                 ClientSecret = ConfigurationManager.AppSettings["google:client_secret"],
                 Caption = "Google"
             });
+
+            using (var dbContext = new IdentityDbContext<UsuarioAplicacao>("DefaultConnection"))
+            {
+                CriarRoles(dbContext);
+                CriarAdministrador(dbContext);
+            }
+        }
+
+        private void CriarRoles(IdentityDbContext<UsuarioAplicacao> dbContext)
+        {
+            using (var roleStore = new RoleStore<IdentityRole>(dbContext))
+            using (var roleManager = new RoleManager<IdentityRole>(roleStore))
+            {
+                if (!roleManager.RoleExists(Roles.Administrador))
+                {
+                    roleManager.Create(new IdentityRole(Roles.Administrador));
+                }
+
+                if (!roleManager.RoleExists(Roles.Moderador))
+                {
+                    roleManager.Create(new IdentityRole(Roles.Moderador));
+                }
+            }
+        }
+
+        private void CriarAdministrador(IdentityDbContext<UsuarioAplicacao> dbContext)
+        {
+            using (var userStore = new UserStore<UsuarioAplicacao>(dbContext))
+            using (var userManager = new UserManager<UsuarioAplicacao>(userStore))
+            {
+                var administradorEmail = ConfigurationManager.AppSettings["admin:email"];
+                var administrador = userManager.FindByEmail(administradorEmail);
+
+                if (administrador != null)
+                {
+                    return;
+                }
+
+                administrador = new UsuarioAplicacao
+                {
+                    NomeCompleto = Roles.Administrador,
+                    Email = administradorEmail,
+                    EmailConfirmed = true,
+                    UserName = ConfigurationManager.AppSettings["admin:user_name"],
+                };
+
+                userManager.Create(administrador, ConfigurationManager.AppSettings["admin:senha"]);
+                userManager.AddToRole(administrador.Id, Roles.Administrador);
+            }
         }
     }
 }
